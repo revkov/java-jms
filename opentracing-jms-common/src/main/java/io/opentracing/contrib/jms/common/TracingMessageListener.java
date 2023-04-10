@@ -16,8 +16,8 @@ package io.opentracing.contrib.jms.common;
 import io.opentracing.Scope;
 import io.opentracing.Span;
 import io.opentracing.Tracer;
-import javax.jms.Message;
-import javax.jms.MessageListener;
+import jakarta.jms.Message;
+import jakarta.jms.MessageListener;
 import org.slf4j.MDC;
 
 /**

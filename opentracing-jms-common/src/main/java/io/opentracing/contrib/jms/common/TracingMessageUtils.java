@@ -20,8 +20,8 @@ import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
 import io.opentracing.tag.Tags;
 
-import javax.jms.Destination;
-import javax.jms.Message;
+import jakarta.jms.Destination;
+import jakarta.jms.Message;
 
 public class TracingMessageUtils {
 

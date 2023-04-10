@@ -13,27 +13,50 @@
  */
 package io.opentracing.contrib.jms.common;
 
+import jakarta.jms.JMSException;
+import org.apache.activemq.artemis.api.core.client.ActiveMQClient;
+import org.apache.activemq.artemis.api.core.client.ClientSession;
+import org.apache.activemq.artemis.api.core.client.ClientSessionFactory;
+import org.apache.activemq.artemis.api.core.client.ServerLocator;
+import org.apache.activemq.artemis.core.config.Configuration;
+import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.jms.client.ActiveMQTextMessage;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.migrationsupport.rules.EnableRuleMigrationSupport;
+import org.junit.rules.ExpectedException;
+
 import static io.opentracing.contrib.jms.common.JmsTextMapInjectAdapter.DASH;
 import static org.junit.Assert.assertEquals;
 
-import javax.jms.JMSException;
-import org.apache.activemq.command.ActiveMQTextMessage;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
-
+@EnableRuleMigrationSupport
 public class JmsTextMapInjectAdapterTest {
 
-  private ActiveMQTextMessage message;
+  private static ActiveMQTextMessage message;
 
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
-  @Before
-  public void before() {
-    message = new ActiveMQTextMessage();
+  @BeforeAll
+  public static void before() throws Exception {
+    Configuration config = new ConfigurationImpl();
+
+    config.addAcceptorConfiguration("in-vm", "vm://0");
+    config.setSecurityEnabled(false);
+    EmbeddedActiveMQ embedded = new EmbeddedActiveMQ();
+    embedded.setConfiguration(config);
+    embedded.start();
+    ServerLocator locator = ActiveMQClient.createServerLocator("vm://0");
+    ClientSessionFactory factory =  locator.createSessionFactory();
+    ClientSession session = factory.createSession();
+    message = new ActiveMQTextMessage(session);
   }
 
   @Test
@@ -49,18 +72,18 @@ public class JmsTextMapInjectAdapterTest {
     adapter.put("key1", "value1");
     adapter.put("key2", "value2");
     adapter.put("key1", "value3");
-    assertEquals("value3", message.getStringProperty("key1"));
-    assertEquals("value2", message.getStringProperty("key2"));
+    Assertions.assertEquals("value3", message.getStringProperty("key1"));
+    Assertions.assertEquals("value2", message.getStringProperty("key2"));
   }
 
   @Test
   public void propertyWithDash() throws JMSException {
     JmsTextMapInjectAdapter adapter = new JmsTextMapInjectAdapter(message);
     adapter.put("key-1", "value1");
-    assertEquals("value1", message.getStringProperty("key" + DASH + "1"));
+    Assertions.assertEquals("value1", message.getStringProperty("key" + DASH + "1"));
 
     adapter.put("-key-1-2-", "value2");
-    assertEquals("value2",
+    Assertions.assertEquals("value2",
         message.getStringProperty(DASH + "key" + DASH + "1" + DASH + "2" + DASH));
   }
 }

@@ -13,30 +13,57 @@
  */
 package io.opentracing.contrib.jms.common;
 
-import static io.opentracing.contrib.jms.common.JmsTextMapInjectAdapter.DASH;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import jakarta.jms.JMSException;
+import org.apache.activemq.artemis.api.core.client.ActiveMQClient;
+import org.apache.activemq.artemis.api.core.client.ClientSession;
+import org.apache.activemq.artemis.api.core.client.ClientSessionFactory;
+import org.apache.activemq.artemis.api.core.client.ServerLocator;
+import org.apache.activemq.artemis.core.config.Configuration;
+import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.jms.client.ActiveMQTextMessage;
+import org.junit.Rule;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.migrationsupport.rules.EnableRuleMigrationSupport;
+import org.junit.rules.ExpectedException;
 
 import java.util.Iterator;
 import java.util.Map;
-import javax.jms.JMSException;
-import org.apache.activemq.command.ActiveMQTextMessage;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+
+import static io.opentracing.contrib.jms.common.JmsTextMapInjectAdapter.DASH;
 
 
+@EnableRuleMigrationSupport
 public class JmsTextMapExtractAdapterTest {
 
   private ActiveMQTextMessage message;
 
+  private static ClientSession clientSession;
+
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
-  @Before
-  public void before() {
-    message = new ActiveMQTextMessage();
+  @BeforeAll
+  public static void beforeAll() throws Exception {
+    Configuration config = new ConfigurationImpl();
+
+    config.addAcceptorConfiguration("in-vm", "vm://0");
+    config.setSecurityEnabled(false);
+    EmbeddedActiveMQ embedded = new EmbeddedActiveMQ();
+    embedded.setConfiguration(config);
+    embedded.start();
+    ServerLocator locator = ActiveMQClient.createServerLocator("vm://0");
+    ClientSessionFactory factory =  locator.createSessionFactory();
+    clientSession = factory.createSession();
+
+  }
+
+  @BeforeEach
+  public void  before() {
+    message = new ActiveMQTextMessage(clientSession);
   }
 
   @Test
@@ -50,7 +77,7 @@ public class JmsTextMapExtractAdapterTest {
   public void noProperties() {
     JmsTextMapExtractAdapter adapter = new JmsTextMapExtractAdapter(message);
     Iterator<Map.Entry<String, String>> iterator = adapter.iterator();
-    assertFalse(iterator.hasNext());
+    Assertions.assertFalse(iterator.hasNext());
   }
 
   @Test
@@ -59,8 +86,8 @@ public class JmsTextMapExtractAdapterTest {
     JmsTextMapExtractAdapter adapter = new JmsTextMapExtractAdapter(message);
     Iterator<Map.Entry<String, String>> iterator = adapter.iterator();
     Map.Entry<String, String> entry = iterator.next();
-    assertEquals("key", entry.getKey());
-    assertEquals("value", entry.getValue());
+    Assertions.assertEquals("key", entry.getKey());
+    Assertions.assertEquals("value", entry.getValue());
   }
 
   @Test
@@ -69,8 +96,8 @@ public class JmsTextMapExtractAdapterTest {
     JmsTextMapExtractAdapter adapter = new JmsTextMapExtractAdapter(message);
     Iterator<Map.Entry<String, String>> iterator = adapter.iterator();
     Map.Entry<String, String> entry = iterator.next();
-    assertEquals("-key-1-", entry.getKey());
-    assertEquals("value1", entry.getValue());
+    Assertions.assertEquals("-key-1-", entry.getKey());
+    Assertions.assertEquals("value1", entry.getValue());
   }
 
 }

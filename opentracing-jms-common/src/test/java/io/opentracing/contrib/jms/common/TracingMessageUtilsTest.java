@@ -13,132 +13,173 @@
  */
 package io.opentracing.contrib.jms.common;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.mock.MockSpan;
 import io.opentracing.mock.MockTracer;
 import io.opentracing.tag.Tags;
+import jakarta.jms.Destination;
+import jakarta.jms.JMSException;
+import org.apache.activemq.artemis.api.core.ActiveMQException;
+import org.apache.activemq.artemis.api.core.client.ActiveMQClient;
+import org.apache.activemq.artemis.api.core.client.ClientSession;
+import org.apache.activemq.artemis.api.core.client.ClientSessionFactory;
+import org.apache.activemq.artemis.api.core.client.ServerLocator;
+import org.apache.activemq.artemis.core.config.Configuration;
+import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.jms.client.ActiveMQQueue;
+import org.apache.activemq.artemis.jms.client.ActiveMQTextMessage;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
-import javax.jms.Destination;
-import org.apache.activemq.command.ActiveMQQueue;
-import org.apache.activemq.command.ActiveMQTextMessage;
-import org.junit.Before;
-import org.junit.Test;
+
 
 
 public class TracingMessageUtilsTest {
 
   private final MockTracer mockTracer = new MockTracer();
+  private static ClientSession clientSession;
 
+  //private EmbeddedActiveMQ embeddedActiveMQ;
 
-  @Before
-  public void before() {
+  @BeforeAll
+  public static void beforeAll() throws Exception {
+    if (clientSession == null) {
+      Configuration config = new ConfigurationImpl();
+      config.addAcceptorConfiguration("in-vm", "vm://0");
+      config.setSecurityEnabled(false);
+      EmbeddedActiveMQ embeddedActiveMQ = new EmbeddedActiveMQ();
+      embeddedActiveMQ.setConfiguration(config);
+      embeddedActiveMQ.start();
+      ServerLocator locator = ActiveMQClient.createServerLocator("vm://0");
+      ClientSessionFactory factory =  locator.createSessionFactory();
+      clientSession = factory.createSession();
+    }
+  }
+
+  @BeforeEach
+  public void before() throws Exception {
     mockTracer.reset();
   }
 
   @Test
-  public void noSpanToExtract() {
-    SpanContext context = TracingMessageUtils.extract(new ActiveMQTextMessage(), mockTracer);
-    assertNull(context);
+  public void noSpanToExtract() throws Exception {
+    SpanContext context = TracingMessageUtils.extract(new ActiveMQTextMessage(clientSession), mockTracer);
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertNull(context);
   }
 
   @Test
-  public void extractContextFromManager() {
+  public void extractContextFromManager() throws Exception {
     MockSpan span = mockTracer.buildSpan("test").start();
     mockTracer.scopeManager().activate(span);
     MockSpan.MockContext context =
-        (MockSpan.MockContext) TracingMessageUtils.extract(new ActiveMQTextMessage(), mockTracer);
-    assertNotNull(context);
-    assertEquals(span.context().spanId(), context.spanId());
+        (MockSpan.MockContext) TracingMessageUtils.extract(new ActiveMQTextMessage(clientSession), mockTracer);
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertNotNull(context);
+    Assertions.assertEquals(span.context().spanId(), context.spanId());
   }
 
   @Test
-  public void extractContextFromMessage() {
+  public void extractContextFromMessage() throws Exception {
     MockSpan span = mockTracer.buildSpan("test").start();
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
     TracingMessageUtils.inject(span, message, mockTracer);
     MockSpan.MockContext context =
         (MockSpan.MockContext) TracingMessageUtils.extract(message, mockTracer);
-    assertNotNull(context);
-    assertEquals(span.context().spanId(), context.spanId());
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertNotNull(context);
+    Assertions.assertEquals(span.context().spanId(), context.spanId());
   }
 
   @Test
-  public void startAndFinishConsumerSpan() {
+  public void startAndFinishConsumerSpan() throws Exception {
     MockSpan span = mockTracer.buildSpan("test").start();
     mockTracer.scopeManager().activate(span);
     SpanContext childContext =
-        TracingMessageUtils.startAndFinishConsumerSpan(new ActiveMQTextMessage(), mockTracer);
-    assertNotNull(childContext);
+        TracingMessageUtils.startAndFinishConsumerSpan(new ActiveMQTextMessage(clientSession), mockTracer);
+    Assertions.assertNotNull(childContext);
 
-    assertNotNull(mockTracer.activeSpan());
+    Assertions.assertNotNull(mockTracer.activeSpan());
 
-    assertEquals(1, mockTracer.finishedSpans().size());
+    Assertions.assertEquals(1, mockTracer.finishedSpans().size());
 
     MockSpan finished = mockTracer.finishedSpans().get(0);
-
-    assertEquals(TracingMessageUtils.OPERATION_NAME_RECEIVE, finished.operationName());
-    assertEquals(Tags.SPAN_KIND_CONSUMER, finished.tags().get(Tags.SPAN_KIND.getKey()));
-    assertEquals(TracingMessageUtils.COMPONENT_NAME, finished.tags().get(Tags.COMPONENT.getKey()));
-    assertEquals(span.context().spanId(), finished.parentId());
-    assertEquals(span.context().traceId(), finished.context().traceId());
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertEquals(TracingMessageUtils.OPERATION_NAME_RECEIVE, finished.operationName());
+    Assertions.assertEquals(Tags.SPAN_KIND_CONSUMER, finished.tags().get(Tags.SPAN_KIND.getKey()));
+    Assertions.assertEquals(TracingMessageUtils.COMPONENT_NAME, finished.tags().get(Tags.COMPONENT.getKey()));
+    Assertions.assertEquals(span.context().spanId(), finished.parentId());
+    Assertions.assertEquals(span.context().traceId(), finished.context().traceId());
   }
 
   @Test
-  public void inject() throws IOException {
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
-    assertTrue(message.getProperties().isEmpty());
+  public void inject() throws Exception {
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
+    //clientSession.stop();
+   // embeddedActiveMQ.stop();
+    Assertions.assertTrue(message.getCoreMessage().getPropertyNames().isEmpty());
 
     MockSpan span = mockTracer.buildSpan("test").start();
     TracingMessageUtils.inject(span, message, mockTracer);
-    assertFalse(message.getProperties().isEmpty());
+    Assertions.assertFalse(message.getCoreMessage().getPropertyNames().isEmpty());
   }
 
   @Test
   public void startAndInjectSpan() throws Exception {
     Destination destination = new ActiveMQQueue("queue");
 
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
     MockSpan span = mockTracer.buildSpan("test").start();
     mockTracer.scopeManager().activate(span);
 
     MockSpan injected =
         (MockSpan) TracingMessageUtils.startAndInjectSpan(destination, message, mockTracer);
 
-    assertFalse(message.getProperties().isEmpty());
-    assertEquals(span.context().spanId(), injected.parentId());
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertFalse(message.getCoreMessage().getPropertyNames().isEmpty());
+    Assertions.assertEquals(span.context().spanId(), injected.parentId());
   }
 
   @Test
-  public void startListenerSpanWithoutParent() {
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
+  public void startListenerSpanWithoutParent() throws Exception {
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
     Span span = TracingMessageUtils.startListenerSpan(message, mockTracer);
-    assertTrue(span instanceof MockSpan);
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertTrue(span instanceof MockSpan);
   }
 
   @Test
-  public void startListenerSpan() {
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
+  public void startListenerSpan() throws Exception {
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
     Destination destination = new ActiveMQQueue("queue");
     MockSpan injected =
         (MockSpan) TracingMessageUtils.startAndInjectSpan(destination, message, mockTracer);
     MockSpan span = (MockSpan) TracingMessageUtils.startListenerSpan(message, mockTracer);
-    assertEquals(span.parentId(), injected.context().spanId());
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertEquals(span.parentId(), injected.context().spanId());
   }
 
   @Test
-  public void startListenerSpanWithActiveSpan() {
-    ActiveMQTextMessage message = new ActiveMQTextMessage();
+  public void startListenerSpanWithActiveSpan() throws Exception {
+    ActiveMQTextMessage message = new ActiveMQTextMessage(clientSession);
     MockSpan parent = mockTracer.buildSpan("test").start();
     mockTracer.scopeManager().activate(parent);
     MockSpan span = (MockSpan) TracingMessageUtils.startListenerSpan(message, mockTracer);
-    assertEquals(span.parentId(), parent.context().spanId());
+    //clientSession.stop();
+    //embeddedActiveMQ.stop();
+    Assertions.assertEquals(span.parentId(), parent.context().spanId());
   }
 
 }

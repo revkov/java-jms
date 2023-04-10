@@ -16,8 +16,8 @@ package io.opentracing.contrib.jms.common;
 import io.opentracing.propagation.TextMap;
 import java.util.Iterator;
 import java.util.Map;
-import javax.jms.JMSException;
-import javax.jms.Message;
+import jakarta.jms.JMSException;
+import jakarta.jms.Message;
 
 /**
  * Helper class to inject span context into JMS message properties
